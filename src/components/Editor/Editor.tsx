@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { generateHtmlRequest } from '../../services/api';
+
 import {
   Textarea,
   Button,
@@ -24,6 +26,8 @@ export function Editor() {
   const [showSettings, setShowSettings] = useState(false);
   const [logOpen, setLogOpen] = useState<boolean>(() => localStorage.getItem('previhtml:log_open') === '1');
   const [generatedHtml, setGeneratedHtml] = useState<string>(localStorage.getItem('previhtml:generated_html') || '');
+  const [isLoading, setIsLoading] = useState(false);
+  const [logsModalOpen, setLogsModalOpen] = useState(false);
 
   function addLog(level: LogEntry['level'], message: string) {
     const entry = { ts: new Date().toISOString(), level, message };
@@ -36,6 +40,43 @@ export function Editor() {
       }
       return next;
     });
+  }
+
+  // return logs as plain text for viewing/exporting
+  function getLogsText() {
+    return logs.map(l => `[${l.ts}] ${l.level.toUpperCase()}: ${l.message}`).join('\n');
+  }
+
+  function copyLogs() {
+    try {
+      const txt = getLogsText();
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(txt);
+        addLog('info', 'Copied logs to clipboard');
+      } else {
+        addLog('error', 'Clipboard API not available for logs');
+      }
+    } catch (e: any) {
+      addLog('error', `Failed to copy logs: ${e?.message || String(e)}`);
+    }
+  }
+
+  function downloadLogs() {
+    try {
+      const txt = getLogsText();
+      const blob = new Blob([txt], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'previhtml_logs.txt';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      addLog('info', 'Downloaded logs');
+    } catch (e: any) {
+      addLog('error', `Failed to download logs: ${e?.message || String(e)}`);
+    }
   }
 
   useEffect(() => {
@@ -69,11 +110,23 @@ export function Editor() {
   }, [text]);
 
   async function generateHtml() {
+    // Orchestration only - validate inputs and delegate request to api service (SOLID)
     addLog('info', 'Generate requested');
+    setIsLoading(true);
+
+    if (!text || text.trim().length === 0) {
+      addLog('error', 'No input text provided');
+      setGeneratedHtml('<!-- no input text provided -->');
+      setIsLoading(false);
+      return;
+    }
+
+    // Local fallback if no API key configured
     if (!apiKey) {
       const html = `<div><p>${escapeHtml(text).replace(/\n/g, '<br/>')}</p></div>`;
       setGeneratedHtml(html);
       addLog('info', 'Used local fallback formatter (no API key)');
+      setIsLoading(false);
       return;
     }
 
@@ -91,55 +144,65 @@ export function Editor() {
       return s.length > n ? s.slice(0, n) + '... (truncated)' : s;
     }
 
+    addLog('info', 'Calling OpenRouter (client-side) - preparing request');
+    addLog('info', `Request payload preview: ${truncate(JSON.stringify(payload))}`);
+
+    const controller = new AbortController();
+    const timeoutMs = 20000; // 20s
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
     try {
-      addLog('info', 'Calling OpenRouter (client-side) - preparing request');
-      addLog('info', `Request payload preview: ${truncate(JSON.stringify(payload))}`);
-
-      const controller = new AbortController();
-      const timeoutMs = 20000; // 20s
-      const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
       addLog('info', `Sending request to openrouter.ai (timeout ${timeoutMs}ms)`);
-      const res = await fetch('https://openrouter.ai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
+
+      // delegate actual HTTP call to service that uses axios (tans-query style separation)
+      const res = await generateHtmlRequest(apiKey || null, payload, controller.signal);
       clearTimeout(timeout);
 
-      addLog('info', `HTTP response: ${res.status} ${res.statusText}`);
-      const textResp = await res.text();
+      addLog('info', `HTTP response: ${res.status} ${res.statusText || ''}`);
+      const data = res.data;
+      const textResp = typeof data === 'string' ? data : JSON.stringify(data);
       addLog('info', `Response body preview (${textResp.length} chars): ${truncate(textResp, 2000)}`);
 
-      let j: any = null;
-      try {
-        j = JSON.parse(textResp);
-        addLog('info', 'Parsed JSON response');
-      } catch (e: any) {
-        addLog('error', `Failed to parse JSON response: ${e?.message || String(e)}`);
-      }
-
-      if (!res.ok) {
-        addLog('error', `OpenRouter error: ${res.status} ${res.statusText} - ${truncate(textResp)}`);
-        setGeneratedHtml(`<!-- OpenRouter error: ${res.status} ${res.statusText} -->`);
+      if (res.status < 200 || res.status >= 300) {
+        addLog('error', `OpenRouter error: ${res.status} ${res.statusText || ''} - ${truncate(textResp)}`);
+        setGeneratedHtml(`<!-- OpenRouter error: ${res.status} ${res.statusText || ''} -->`);
+        setIsLoading(false);
         return;
       }
+
+      const j = typeof data === 'object' ? data : (() => { try { return JSON.parse(textResp); } catch { return null; } })();
+      if (!j) addLog('error', 'Failed to parse JSON response');
 
       const content = j?.choices?.[0]?.message?.content || j?.choices?.[0]?.text || j?.result || (j ? JSON.stringify(j) : textResp);
       setGeneratedHtml(content);
       addLog('info', `OpenRouter returned content (${(content || '').length} chars) in ${Date.now() - start}ms`);
     } catch (err: any) {
-      if (err?.name === 'AbortError') {
+      clearTimeout(timeout);
+      // axios abort/canceled errors
+      const isCanceled = err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError' || String(err?.message || '').toLowerCase().includes('canceled') || String(err?.message || '').toLowerCase().includes('abort');
+      if (isCanceled) {
         addLog('error', 'OpenRouter request timed out (abort)');
         setGeneratedHtml('<!-- request timed out -->');
-      } else {
-        addLog('error', `OpenRouter request failed: ${err?.message || String(err)}`);
-        setGeneratedHtml(`<!-- request failed: ${err?.message || String(err)} -->`);
+        setIsLoading(false);
+        return;
       }
+
+      if (err?.response) {
+        // HTTP error from server
+        const status = err.response.status;
+        const statusText = err.response.statusText || '';
+        const body = JSON.stringify(err.response.data || '');
+        addLog('error', `OpenRouter error: ${status} ${statusText} - ${body}`);
+        setGeneratedHtml(`<!-- OpenRouter error: ${status} ${statusText} -->`);
+        setIsLoading(false);
+        return;
+      }
+
+      addLog('error', `OpenRouter request failed: ${err?.message || String(err)}`);
+      setGeneratedHtml(`<!-- request failed: ${err?.message || String(err)} -->`);
+      setIsLoading(false);
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -179,10 +242,12 @@ export function Editor() {
         <Group spacing="xs">
           <Badge color={apiKey ? 'teal' : 'gray'}>{apiKey ? 'OpenRouter: configured' : 'Offline (no key)'}</Badge>
           <Button size="xs" onClick={() => setShowSettings(true)}>Settings</Button>
-          <Button size="xs" onClick={() => generateHtml()}>Generate HTML</Button>
+          <Button size="xs" onClick={() => generateHtml()} loading={isLoading} disabled={isLoading}>Generate HTML</Button>
           <Button size="xs" onClick={() => copyHtml()} disabled={!generatedHtml}>Copy HTML</Button>
           <Button size="xs" onClick={() => downloadHtml()} disabled={!generatedHtml}>Save File</Button>
           <Button size="xs" onClick={() => setLogOpen((v) => !v)}>{logOpen ? 'Hide Logs' : 'Show Logs'}</Button>
+          <Button size="xs" onClick={() => setLogsModalOpen(true)}>View Logs</Button>
+          <Button size="xs" onClick={() => downloadLogs()}>Export Logs</Button>
         </Group>
       </Group>
 
@@ -228,6 +293,16 @@ export function Editor() {
           >
             Save
           </Button>
+        </Group>
+      </Modal>
+
+      <Modal opened={logsModalOpen} onClose={() => setLogsModalOpen(false)} title="Logs">
+        <ScrollArea style={{ height: 400 }}>
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{getLogsText()}</pre>
+        </ScrollArea>
+        <Group position="right" mt="md">
+          <Button size="xs" onClick={() => copyLogs()}>Copy Logs</Button>
+          <Button size="xs" onClick={() => downloadLogs()}>Download Logs</Button>
         </Group>
       </Modal>
     </Paper>
