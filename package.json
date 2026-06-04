@@ -1,5 +1,5 @@
 {
-  "name": "mantine-vite-template",
+  "name": "previhtml-app",
   "private": true,
   "type": "module",
   "version": "0.0.0",
@@ -17,7 +17,10 @@
     "vitest:watch": "vitest",
     "test": "npm run typecheck && npm run format:test && npm run lint && npm run vitest && npm run build",
     "storybook": "storybook dev -p 6006",
-    "storybook:build": "storybook build"
+    "storybook:build": "storybook build",
+    "copy:sd": "bash scripts/copy_to_sd.sh",
+    "autocommit": "node scripts/autocommit.js",
+    "symlink": "bash scripts/create_symlink.sh"
   },
   "dependencies": {
     "@mantine/core": "9.3.0",
@@ -52,6 +55,5 @@
     "typescript": "6.0.3",
     "vite": "^8.0.0",
     "vitest": "^4.1.0"
-  },
-  "packageManager": "yarn@4.15.0"
+  }
 }
