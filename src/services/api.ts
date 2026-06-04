@@ -1,6 +1,7 @@
 import axios from 'axios';
+import OpenRouter from '@openrouter/sdk';
 
-// Prefer using the OpenRouter FE SDK when available in the browser (UMD global or installed package).
+// Prefer using the OpenRouter FE SDK when available (installed package or UMD global).
 // If the FE SDK isn't present, fall back to the existing axios-based direct HTTP request.
 
 declare global {
@@ -10,16 +11,17 @@ declare global {
 }
 
 export async function generateHtmlRequest(apiKey: string | null, payload: any, signal?: AbortSignal) {
-  // If running in a browser and the OpenRouter UMD SDK was loaded (e.g. via CDN), use it.
-  const hasGlobalSDK = typeof window !== 'undefined' && !!(window as any).OpenRouter;
+  // If running in a browser and the installed SDK is available, use it.
+  const hasInstalledSdk = !!OpenRouter;
+  const hasGlobalSdk = typeof window !== 'undefined' && !!(window as any).OpenRouter;
 
-  if (hasGlobalSDK && apiKey) {
+  if ((hasInstalledSdk || hasGlobalSdk) && apiKey) {
     try {
-      const OpenRouter = (window as any).OpenRouter;
-      const client = new OpenRouter({ apiKey });
+      const RouterLib = hasInstalledSdk ? OpenRouter : (window as any).OpenRouter;
+      const client = new RouterLib({ apiKey });
 
-      // The FE SDK exposes chat.completions.create(payload)
-      // We don't have a standardized AbortSignal integration here, so call without signal.
+      // The SDK exposes chat.completions.create(payload)
+      // Note: AbortSignal support may not be available; this call omits signal.
       const result = await client.chat.completions.create(payload);
 
       // Normalize to an axios-like response shape expected by the caller

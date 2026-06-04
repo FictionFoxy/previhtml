@@ -25,6 +25,7 @@
   "dependencies": {
     "@mantine/core": "9.3.0",
     "@mantine/hooks": "9.3.0",
+    "@openrouter/sdk": "^0.12.79",
     "axios": "^1.17.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
