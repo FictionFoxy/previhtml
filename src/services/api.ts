@@ -1,7 +1,7 @@
 import axios from 'axios';
-import OpenRouter from '@openrouter/sdk';
 
 // Prefer using the OpenRouter FE SDK when available (installed package or UMD global).
+// We import the SDK dynamically at runtime to avoid Vite / SSR build-time issues.
 // If the FE SDK isn't present, fall back to the existing axios-based direct HTTP request.
 
 declare global {
@@ -11,14 +11,24 @@ declare global {
 }
 
 export async function generateHtmlRequest(apiKey: string | null, payload: any, signal?: AbortSignal) {
-  // If running in a browser and the installed SDK is available, use it.
-  const hasInstalledSdk = !!OpenRouter;
+  // Attempt dynamic import of the installed SDK only at runtime (browser)
+  let RouterLib: any = null;
+  if (typeof window !== 'undefined' && apiKey) {
+    try {
+      const mod = await import('@openrouter/sdk');
+      RouterLib = mod.default || mod.OpenRouter || mod;
+    } catch (e) {
+      // dynamic import failed (package not resolvable at runtime or bundler issue) — we'll fall back to axios
+      RouterLib = null;
+    }
+  }
+
   const hasGlobalSdk = typeof window !== 'undefined' && !!(window as any).OpenRouter;
 
-  if ((hasInstalledSdk || hasGlobalSdk) && apiKey) {
+  if ((RouterLib || hasGlobalSdk) && apiKey) {
     try {
-      const RouterLib = hasInstalledSdk ? OpenRouter : (window as any).OpenRouter;
-      const client = new RouterLib({ apiKey });
+      const Lib = RouterLib || (window as any).OpenRouter;
+      const client = new Lib({ apiKey });
 
       // The SDK exposes chat.completions.create(payload)
       // Note: AbortSignal support may not be available; this call omits signal.
