@@ -30,9 +30,19 @@ export async function generateHtmlRequest(apiKey: string | null, payload: any, s
       const Lib = RouterLib || (window as any).OpenRouter;
       const client = new Lib({ apiKey });
 
-      // The SDK exposes chat.completions.create(payload)
+      // SDK surface differs between versions — prefer chat.send or chat.completions.create where available.
       // Note: AbortSignal support may not be available; this call omits signal.
-      const result = await client.chat.completions.create(payload);
+      let result: any = null;
+
+      if (client.chat && typeof client.chat.send === 'function') {
+        // new sdk: chat.send expects an object with ChatRequest body
+        result = await client.chat.send({ ChatRequest: payload });
+      } else if (client.chat && client.chat.completions && typeof client.chat.completions.create === 'function') {
+        // alternate surface
+        result = await client.chat.completions.create(payload);
+      } else {
+        throw new Error('OpenRouter SDK: chat API not found on client');
+      }
 
       // Normalize to an axios-like response shape expected by the caller
       return {
