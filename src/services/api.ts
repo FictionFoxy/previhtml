@@ -50,9 +50,15 @@ export async function generateHtmlRequest(apiKey: string | null, payload: any, s
         statusText: 'OK',
         data: result,
       };
-    } catch (err) {
-      // bubble up to caller to handle logging/formatting
-      throw err;
+    } catch (err: any) {
+      // If SDK call failed due to unexpected surface (e.g. missing `create`), fall back to HTTP path.
+      const msg = String(err?.message || err || '');
+      if (msg.includes("create") || msg.includes('chat API not found') || msg.includes('not found')) {
+        // fallback to axios request below
+      } else {
+        // bubble up to caller to handle logging/formatting
+        throw err;
+      }
     }
   }
 
