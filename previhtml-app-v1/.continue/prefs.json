@@ -1,0 +1,4 @@
+{
+  "rules_view_visibility": "user_must_see_exact_rules",
+  "note": "When the user writes rules, show the exact rule text before writing and ask for confirmation. User pref: prefer pnpm."
+}
