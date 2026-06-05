@@ -14,6 +14,9 @@ importers:
       '@mantine/hooks':
         specifier: 9.3.0
         version: 9.3.0(react@19.2.7)
+      '@openrouter/sdk':
+        specifier: ^0.12.79
+        version: 0.12.79
       axios:
         specifier: ^1.17.0
         version: 1.17.0
@@ -523,6 +526,9 @@ packages:
   '@nodelib/fs.walk@1.2.8':
     resolution: {integrity: sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==}
     engines: {node: '>= 8'}
+
+  '@openrouter/sdk@0.12.79':
+    resolution: {integrity: sha512-0ZpwtnuHh3/B1piW9kHCUIQy6PAsaK/vjFdZuHxmCdAenCyUNsLA2mFpmfHNWRNb+bOO3yBc4IALa264UyzmBA==}
 
   '@oxc-parser/binding-android-arm-eabi@0.127.0':
     resolution: {integrity: sha512-0LC7ye4hvqbIKxAzThzvswgHLFu2AURKzYLeSVvLdu2TBOYWQDmHnTqPLeA597BcUCxiLqLsS4CJ5uoI5WYWCQ==}
@@ -2751,6 +2757,9 @@ packages:
   yallist@3.1.1:
     resolution: {integrity: sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==}
 
+  zod@4.4.3:
+    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+
 snapshots:
 
   '@adobe/css-tools@4.5.0': {}
@@ -3139,6 +3148,10 @@ snapshots:
     dependencies:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.20.1
+
+  '@openrouter/sdk@0.12.79':
+    dependencies:
+      zod: 4.4.3
 
   '@oxc-parser/binding-android-arm-eabi@0.127.0':
     optional: true
@@ -5021,3 +5034,5 @@ snapshots:
   xmlchars@2.2.0: {}
 
   yallist@3.1.1: {}
+
+  zod@4.4.3: {}
